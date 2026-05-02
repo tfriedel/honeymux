@@ -2,6 +2,7 @@ import type { TmuxControlClient } from "../tmux/control-client.ts";
 import type { RemoteControlClient } from "./remote-control-client.ts";
 
 import { quoteTmuxArg } from "../tmux/escape.ts";
+import { log } from "../util/log.ts";
 
 const LOCAL_WINDOW_ID_OPTION = "@hmx-local-window-id";
 
@@ -75,6 +76,7 @@ export class MirrorLayoutManager {
     // Any remote window left unassigned no longer corresponds to a local
     // window and can be dropped from the mirror session.
     for (const remoteWindow of unassignedRemoteWindows) {
+      log("mirror", `fullSync drop unassigned remote window=${remoteWindow.id}`);
       await this.remoteClient.sendCommand(`kill-window -t ${remoteWindow.id}`).catch(() => {});
     }
   }
@@ -135,6 +137,7 @@ export class MirrorLayoutManager {
    */
   async onWindowClose(localWindowId: string): Promise<void> {
     const remoteWindowId = this.windowMap.get(localWindowId);
+    log("mirror", `onWindowClose local=${localWindowId} remote=${remoteWindowId ?? "<none>"}`);
     if (!remoteWindowId) return;
 
     if (await this.localWindowExists(localWindowId)) return;
@@ -307,6 +310,7 @@ export class MirrorLayoutManager {
         // Defense in depth: never kill an active converted pane, even if its
         // mapping is somehow missing from paneMap.
         if (this.isRemotePaneActive(pane.id)) continue;
+        log("mirror", `syncWindowPanes drop orphan remotePane=${pane.id}`);
         await this.remoteClient.sendCommand(`kill-pane -t ${pane.id}`).catch(() => {});
       }
     }

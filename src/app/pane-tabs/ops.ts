@@ -4,6 +4,7 @@ import type { TmuxControlClient } from "../../tmux/control-client.ts";
 import type { PaneTabPersistState } from "../services/session-persistence.ts";
 import type { PaneTab, PaneTabGroup } from "./types.ts";
 
+import { log as hmxLog } from "../../util/log.ts";
 import { commitStructuralGroups, pruneShadowedSinglePaneGroups, syncPaneTabMarkers } from "./group-sync.ts";
 import {
   clearPaneBorderFormat,
@@ -188,6 +189,9 @@ export function createPaneTabOps({
     livePaneIds: Set<string>,
   ): Promise<void> {
     const toKill = tabs.filter((t) => isGone(t.paneId) && livePaneIds.has(t.paneId));
+    if (toKill.length > 0) {
+      hmxLog("pane-tabs-kill", `killDeadPanes panes=[${toKill.map((t) => t.paneId).join(",")}]`);
+    }
     await Promise.all(toKill.map((t) => client.runCommand(`kill-pane -t ${t.paneId}`).catch(() => {})));
   }
 
@@ -338,6 +342,7 @@ export function createPaneTabOps({
       for (let i = 0; i < group.tabs.length; i++) {
         if (i === group.activeIndex) continue;
         const paneId = group.tabs[i]!.paneId;
+        hmxLog("pane-tabs-kill", `dissolveAll slot=${slotKey} pane=${paneId}`);
         try {
           await client.runCommand(`kill-pane -t ${paneId}`);
         } catch {}

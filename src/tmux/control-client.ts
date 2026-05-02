@@ -4,6 +4,7 @@ import { terminalFgRgb } from "../themes/theme.ts";
 import { trackChildPid, untrackChildPid } from "../util/child-pids.ts";
 import { getTerminalCursorStyle } from "../util/cursor.ts";
 import { EventEmitter } from "../util/event-emitter.ts";
+import { log } from "../util/log.ts";
 import { cleanEnv } from "../util/pty.ts";
 import { tmuxCmd } from "../util/tmux-server.ts";
 import {
@@ -485,6 +486,7 @@ export class TmuxControlClient extends EventEmitter {
    * Kill all panes except the active one.
    */
   async killAllPanesExceptActive(): Promise<void> {
+    log("tmux-kill", `killAllPanesExceptActive ${callerStack()}`);
     await this.sendCommand("kill-pane -a");
   }
 
@@ -492,6 +494,7 @@ export class TmuxControlClient extends EventEmitter {
    * Kill (close) the active pane.
    */
   async killPane(): Promise<void> {
+    log("tmux-kill", `killPane (active) ${callerStack()}`);
     await this.sendCommand("kill-pane");
   }
 
@@ -500,6 +503,7 @@ export class TmuxControlClient extends EventEmitter {
    */
   async killPaneById(paneId: string): Promise<void> {
     assertPaneId(paneId);
+    log("tmux-kill", `killPaneById ${paneId} ${callerStack()}`);
     await this.sendCommand(`kill-pane -t ${quoteTmuxArg("paneId", paneId)}`);
   }
 
@@ -507,6 +511,7 @@ export class TmuxControlClient extends EventEmitter {
    * Kill a tmux session by name.
    */
   async killSession(name: string): Promise<void> {
+    log("tmux-kill", `killSession ${name} ${callerStack()}`);
     await this.sendCommand(`kill-session -t ${quoteTmuxArg("name", name)}`);
   }
 
@@ -515,6 +520,7 @@ export class TmuxControlClient extends EventEmitter {
    */
   async killWindow(windowId: string): Promise<void> {
     assertWindowId(windowId);
+    log("tmux-kill", `killWindow ${windowId} ${callerStack()}`);
     await this.sendCommand(`kill-window -t ${quoteTmuxArg("windowId", windowId)}`);
   }
 
@@ -1024,8 +1030,14 @@ export class TmuxControlClient extends EventEmitter {
         onSessionWindowChanged: () => this.emit("session-window-changed"),
         onSubscriptionChanged: ({ name, paneId, sessionId, value, windowId, windowIndex }) =>
           this.emit("subscription-changed", name, sessionId, windowId, windowIndex, paneId, value),
-        onWindowAdd: (windowId) => this.emit("window-add", windowId),
-        onWindowClose: (windowId) => this.emit("window-close", windowId),
+        onWindowAdd: (windowId) => {
+          log("tmux-event", `window-add ${windowId}`);
+          this.emit("window-add", windowId);
+        },
+        onWindowClose: (windowId) => {
+          log("tmux-event", `window-close ${windowId}`);
+          this.emit("window-close", windowId);
+        },
         onWindowPaneChanged: (windowId, paneId) => this.emit("window-pane-changed", windowId, paneId),
         onWindowRenamed: (windowId, newName) => this.emit("window-renamed", windowId, newName),
       },
@@ -1221,6 +1233,11 @@ function assertWindowId(windowId: string): void {
   if (!WINDOW_ID_RE.test(windowId)) {
     throw new Error(`Invalid window ID: ${windowId}`);
   }
+}
+
+function callerStack(): string {
+  const frames = new Error().stack?.split("\n").slice(3, 7) ?? [];
+  return `stack=${frames.map((f) => f.trim()).join(" | ")}`;
 }
 
 function formatCommandArgs(args: string[]): string {

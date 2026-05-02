@@ -4,6 +4,7 @@ import type { TabRemovalPlan } from "./transitions.ts";
 import type { PaneTab, PaneTabGroup } from "./types.ts";
 
 import { quoteTmuxArg } from "../../tmux/escape.ts";
+import { log as hmxLog } from "../../util/log.ts";
 import {
   clearSiblingPaneFormats,
   collectVisibleTabbedPaneIds,
@@ -207,6 +208,10 @@ export async function applyValidateGroupPlan({
 
     if (plan.activeTabToKillAfterMaterialize) {
       if (promotedIntoVisibleSlot) {
+        hmxLog(
+          "pane-tabs-kill",
+          `applyValidateGroupPlan slot=${plan.slotKey} pane=${plan.activeTabToKillAfterMaterialize.paneId} (post-materialize)`,
+        );
         try {
           await client.runCommand(`kill-pane -t ${plan.activeTabToKillAfterMaterialize.paneId}`);
         } catch {}
@@ -297,6 +302,7 @@ export async function executeTabRemoval({
   }
 
   if (killRemovedPane ?? true) {
+    hmxLog("pane-tabs-kill", `executeTabRemoval pane=${removalPlan.removedTab.paneId}`);
     try {
       await client.runCommand(`kill-pane -t ${removalPlan.removedTab.paneId}`);
     } catch {}

@@ -11,6 +11,7 @@ import type { SidebarView, UiChromeState } from "./use-app-state-groups.ts";
 import { groupSessionsForDisplay } from "../../components/agent-tree-groups.ts";
 import { isMarqueeMode, saveConfig } from "../../util/config.ts";
 import { MODIFIER_KEY_CODES, formatBinding } from "../../util/keybindings.ts";
+import { log } from "../../util/log.ts";
 import { stripAnsiEscapes } from "../../util/text.ts";
 
 const CAPTURE_POLL_MS = 2000;
@@ -281,6 +282,10 @@ export function useMuxotronFocusAndAgentSelection({
 
   const handleTreeAgentSelect = useCallback(
     (session: AgentSession) => {
+      log(
+        "muxotron",
+        `handleTreeAgentSelect agentType=${session.agentType} sessionId=${session.sessionId} paneId=${session.paneId ?? "-"} windowId=${session.windowId ?? "-"} sessionName=${session.sessionName ?? "-"} isRemote=${session.isRemote ?? false}`,
+      );
       setTreeSelectedSession(session);
       setReviewLatched(false);
       activateMuxotronFocus(null);

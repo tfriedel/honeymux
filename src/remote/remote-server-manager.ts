@@ -479,12 +479,15 @@ export class RemoteServerManager extends EventEmitter {
       // layout-change: pane died in a multi-pane window
       // exit: entire remote session died (last pane exited)
       client.on("window-close", (windowId: string) => {
+        log("remote-kill", `remote window-close server=${config.name} window=${windowId}`);
         this.handleRemotePaneDeath(config.name, mirror, windowId);
       });
-      client.on("layout-change", (_windowId: string) => {
+      client.on("layout-change", (windowId: string) => {
+        log("remote-kill", `remote layout-change server=${config.name} window=${windowId}`);
         this.checkForDeadRemotePanes(config.name).catch(() => {});
       });
       client.on("tmux-exit", () => {
+        log("remote-kill", `remote tmux-exit server=${config.name}`);
         this.handleRemoteTmuxExit(config.name);
       });
       client.on("warning", (message: string) => {
@@ -783,14 +786,20 @@ export class RemoteServerManager extends EventEmitter {
    * Handle a remote window closing. Since each mirror window maps to a local
    * window, any pane mapped to that remote window is now dead.
    */
-  private handleRemotePaneDeath(serverName: string, _mirror: MirrorLayoutManager, _remoteWindowId: string): void {
+  private handleRemotePaneDeath(serverName: string, _mirror: MirrorLayoutManager, remoteWindowId: string): void {
+    log("remote-kill", `handleRemotePaneDeath server=${serverName} remoteWindow=${remoteWindowId}`);
     // A remote window closed — use the query-based check to find dead panes
     this.checkForDeadRemotePanes(serverName).catch(() => {});
   }
 
   private handleRemoteTmuxExit(serverName: string): void {
+    const victims: string[] = [];
     for (const [localPaneId, mapping] of [...this.paneMappings]) {
       if (mapping.serverName !== serverName) continue;
+      victims.push(localPaneId);
+    }
+    log("remote-kill", `handleRemoteTmuxExit server=${serverName} killing=[${victims.join(",")}]`);
+    for (const localPaneId of victims) {
       this.killLocalProxyPane(localPaneId);
     }
   }
@@ -831,6 +840,13 @@ export class RemoteServerManager extends EventEmitter {
 
   /** Clean up a local proxy pane whose remote pane died. */
   private killLocalProxyPane(localPaneId: string): void {
+    const stack =
+      new Error().stack
+        ?.split("\n")
+        .slice(2, 6)
+        .map((f) => f.trim())
+        .join(" | ") ?? "";
+    log("remote-kill", `killLocalProxyPane ${localPaneId} stack=${stack}`);
     this.endRemoteSessionsForLocalPane(localPaneId);
     this.paneMappings.delete(localPaneId);
     this.proxyServer.forgetProxy(localPaneId);
