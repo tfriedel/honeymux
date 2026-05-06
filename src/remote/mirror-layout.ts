@@ -55,8 +55,6 @@ interface RemotePane {
 export class MirrorLayoutManager {
   /** Last remote client size we set, to avoid redundant refresh-client calls. */
   private lastClientSize = "";
-  /** remoteWindowId → last layout string applied via select-layout. */
-  private lastLayoutByRemoteWindow = new Map<string, string>();
   /** localPaneId → remotePaneId (positional correspondence within each window) */
   private paneMap = new Map<string, string>();
   /** localWindowId → remoteWindowId */
@@ -133,7 +131,6 @@ export class MirrorLayoutManager {
           : "no @hmx-local-window-id tag";
         this.onIntegrityWarning(`unexpected remote window ${remoteWindow.id} in mirror session: ${reason}`);
       }
-      this.lastLayoutByRemoteWindow.delete(remoteWindow.id);
       await this.remoteClient.sendCommand(`kill-window -t ${remoteWindow.id}`).catch(() => {});
     }
   }
@@ -217,7 +214,6 @@ export class MirrorLayoutManager {
       // Window may already be gone
     }
     this.windowMap.delete(localWindowId);
-    this.lastLayoutByRemoteWindow.delete(remoteWindowId);
 
     // We can't easily tell which panes belonged to this window,
     // so rebuild pane map on next fullSync or layout change.
@@ -390,7 +386,6 @@ export class MirrorLayoutManager {
     const plan = planPanePairings(localPanes, remotePanes);
 
     // Kill orphaned remote panes (with active-pane safety net).
-    let remoteModified = false;
     for (const orphan of plan.orphanRemotePanes) {
       if (this.isRemotePaneActive(orphan.id)) continue;
       const reason = orphan.localPaneId
@@ -399,7 +394,6 @@ export class MirrorLayoutManager {
       log("mirror", `syncWindowPanes drop orphan remotePane=${orphan.id} (${reason})`);
       this.onIntegrityWarning(`unexpected remote pane ${orphan.id} in mirror window ${remoteWindowId}: ${reason}`);
       await this.remoteClient.sendCommand(`kill-pane -t ${orphan.id}`).catch(() => {});
-      remoteModified = true;
     }
 
     // Split for unpaired local panes; capture each new pane ID so we can
@@ -411,28 +405,19 @@ export class MirrorLayoutManager {
         const newRemoteId = output.trim();
         if (newRemoteId) {
           newPairs.push({ localId, needsTagUpdate: true, remoteId: newRemoteId });
-          remoteModified = true;
         }
       } catch {
         // Split failed — local pane stays unpaired this round; next sync retries.
       }
     }
 
-    // Modifying the remote pane set invalidates the layout-dedup cache:
-    // the new pane structure may need re-laying out even if layoutStr
-    // matches what we last applied.
-    if (remoteModified) {
-      this.lastLayoutByRemoteWindow.delete(remoteWindowId);
-    }
-
-    // Sync remote client size and apply the layout, but skip select-layout
-    // when the layout string we'd pass matches the one we last applied to
-    // this window. tmux re-emits %layout-change on every select-layout call
-    // regardless of whether anything moved, so this avoids cascading bursts
-    // on every session-window-changed.
+    // Sync remote client size and re-apply the layout. We always re-apply
+    // even when the layout string matches the prior call: select-layout
+    // is what nudges tmux to assert each pane's size against the current
+    // client width, and skipping it after `respawn-pane` leaves freshly
+    // spawned remote shells rendering at stale dimensions.
     await this.syncClientSize(layoutStr);
-    if (layoutStr && this.lastLayoutByRemoteWindow.get(remoteWindowId) !== layoutStr) {
-      this.lastLayoutByRemoteWindow.set(remoteWindowId, layoutStr);
+    if (layoutStr) {
       await this.remoteClient.sendCommand(`select-layout -t ${remoteWindowId} '${layoutStr}'`).catch(() => {});
     }
 

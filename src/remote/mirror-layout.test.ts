@@ -340,66 +340,6 @@ describe("MirrorLayoutManager", () => {
     expect(mirror.getRemotePaneId("%11")).toBe(newRemoteId);
   });
 
-  test("syncWindowPanes skips select-layout when the layout matches the last applied", async () => {
-    // tmux re-emits %layout-change for every select-layout call, even when
-    // nothing changed. Repeated syncs on a stable layout (common during
-    // session navigation) should not re-apply the same layout string.
-    const localServer = createFakeServer({ panesByWindow: new Map([["@1", ["%10"]]]) });
-    const remoteServer = createFakeServer({
-      localPaneIdsByPane: new Map([["%200", "%10"]]),
-      localWindowIdsByWindow: new Map([["@100", "@1"]]),
-      panesByWindow: new Map([["@100", ["%200"]]]),
-    });
-    const remoteSendCmd = mock(remoteServer.sendCommand);
-    const localClient = { sendCommand: mock(localServer.sendCommand) } as unknown as TmuxControlClient;
-    const remoteClient = { sendCommand: remoteSendCmd } as unknown as RemoteControlClient;
-    const mirror = new MirrorLayoutManager(localClient, remoteClient);
-
-    (mirror as any).windowMap.set("@1", "@100");
-    (mirror as any).paneMap.set("%10", "%200");
-
-    const layout = "aaaa,80x24,0,0,200";
-    await mirror.onLayoutChange("@1", layout);
-    await mirror.onLayoutChange("@1", layout);
-    await mirror.onLayoutChange("@1", layout);
-
-    const selectLayoutCalls = remoteSendCmd.mock.calls.filter(
-      (args) => typeof args[0] === "string" && args[0].startsWith("select-layout"),
-    );
-    expect(selectLayoutCalls.length).toBe(1);
-  });
-
-  test("syncWindowPanes re-applies select-layout after splitting a new pane even when layoutStr matches the cache", async () => {
-    // Splitting a pane mutates the remote window structure, so even if the
-    // local layout string happens to match what we last applied, we must
-    // re-apply select-layout to position the new pane correctly.
-    const localServer = createFakeServer({ panesByWindow: new Map([["@1", ["%10"]]]) });
-    const remoteServer = createFakeServer({
-      localPaneIdsByPane: new Map([["%200", "%10"]]),
-      localWindowIdsByWindow: new Map([["@100", "@1"]]),
-      panesByWindow: new Map([["@100", ["%200"]]]),
-    });
-    const remoteSendCmd = mock(remoteServer.sendCommand);
-    const localClient = { sendCommand: mock(localServer.sendCommand) } as unknown as TmuxControlClient;
-    const remoteClient = { sendCommand: remoteSendCmd } as unknown as RemoteControlClient;
-    const mirror = new MirrorLayoutManager(localClient, remoteClient);
-
-    (mirror as any).windowMap.set("@1", "@100");
-    (mirror as any).paneMap.set("%10", "%200");
-
-    const layout = "aaaa,80x24,0,0,200";
-    await mirror.onLayoutChange("@1", layout);
-
-    // Split locally and re-sync with the same layout string.
-    localServer.state.panesByWindow.set("@1", ["%10", "%11"]);
-    await mirror.onLayoutChange("@1", layout);
-
-    const selectLayoutCalls = remoteSendCmd.mock.calls.filter(
-      (args) => typeof args[0] === "string" && args[0].startsWith("select-layout"),
-    );
-    expect(selectLayoutCalls.length).toBe(2);
-  });
-
   test("onIntegrityWarning fires for an untagged pane that appears in an established mirror window", async () => {
     const localServer = createFakeServer({ panesByWindow: new Map([["@1", ["%10"]]]) });
     const remoteServer = createFakeServer({
