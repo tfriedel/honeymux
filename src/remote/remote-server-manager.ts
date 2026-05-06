@@ -464,6 +464,10 @@ export class RemoteServerManager extends EventEmitter {
       mirror.isRemotePaneActive = (remotePaneId: string) => {
         return this.findLocalPaneForRemote(config.name, remotePaneId) !== undefined;
       };
+      mirror.onIntegrityWarning = (message: string) => {
+        log("remote", `mirror integrity issue for ${this.serverTag(config.name)}: ${message}`);
+        this.emit("warning", `Remote mirror integrity (${config.name}): ${message}`);
+      };
       this.mirrors.set(config.name, mirror);
 
       // Route remote %output to the correct proxy
